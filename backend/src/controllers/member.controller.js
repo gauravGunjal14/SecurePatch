@@ -114,7 +114,114 @@ const addMember = async (req, res, next) => {
     }
 };
 
+const updateMemberRole = async (req, res, next) => {
+    try {
+        const { organizationId, userId } = req.params;
+        const { role } = req.body;
+
+        const allowedRoles = ["admin", "developer"];
+
+        if (!role || !allowedRoles.includes(role)) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: "INVALID_ROLE",
+                    message: "Role must be admin or developer",
+                },
+            });
+        }
+
+        const membership = await OrganizationMember.findOne({
+            user: userId,
+            organization: organizationId,
+            status: "active",
+        });
+
+        if (!membership) {
+            return res.status(404).json({
+                success: false,
+                error: {
+                    code: "MEMBERSHIP_NOT_FOUND",
+                    message: "Organization membership not found",
+                },
+            });
+        }
+
+        if (membership.role === "owner") {
+            return res.status(403).json({
+                success: false,
+                error: {
+                    code: "OWNER_ROLE_PROTECTED",
+                    message: "Owner role cannot be changed using this endpoint",
+                },
+            });
+        }
+
+        membership.role = role;
+        await membership.save();
+
+        return ApiResponse.success(
+            res,
+            {
+                member: {
+                    userId: membership.user,
+                    role: membership.role,
+                    status: membership.status,
+                },
+            },
+            "Member role updated successfully"
+        );
+    } catch (error) {
+        next(error);
+    }
+};
+
+const removeMember = async (req, res, next) => {
+    try {
+        const { organizationId, userId } = req.params;
+
+        const membership = await OrganizationMember.findOne({
+            user: userId,
+            organization: organizationId,
+            status: "active",
+        });
+
+        if (!membership) {
+            return res.status(404).json({
+                success: false,
+                error: {
+                    code: "MEMBERSHIP_NOT_FOUND",
+                    message: "Organization membership not found",
+                },
+            });
+        }
+
+        if (membership.role === "owner") {
+            return res.status(403).json({
+                success: false,
+                error: {
+                    code: "OWNER_CANNOT_BE_REMOVED",
+                    message: "Organization owner cannot be removed",
+                },
+            });
+        }
+
+        membership.status = "inactive";
+        await membership.save();
+
+        return ApiResponse.success(
+            res,
+            null,
+            "Member removed successfully"
+        );
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getMembers,
     addMember,
+    updateMemberRole,
+    removeMember,
 };
