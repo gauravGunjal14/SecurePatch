@@ -12,6 +12,14 @@ const env = {
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackUrl: process.env.GOOGLE_CALLBACK_URL,
   },
+
+  github: {
+    appId: process.env.GITHUB_APP_ID,
+    clientId: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    privateKey: process.env.GITHUB_PRIVATE_KEY,
+    callbackUrl: process.env.GITHUB_CALLBACK_URL,
+  },
 };
 
 if (!env.databaseUrl) {
