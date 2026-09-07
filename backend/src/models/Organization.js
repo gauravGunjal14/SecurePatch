@@ -22,6 +22,12 @@ const organizationSchema = new mongoose.Schema(
       enum: ["active", "suspended"],
       default: "active",
     },
+
+    githubInstallationId: {
+      type: String,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,

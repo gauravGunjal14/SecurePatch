@@ -17,4 +17,11 @@ const githubApp = new App({
   privateKey,
 });
 
-module.exports = githubApp;
+const getInstallationOctokit = async (installationId) => {
+  return await githubApp.getInstallationOctokit(installationId);
+};
+
+module.exports = {
+  githubApp,
+  getInstallationOctokit,
+};

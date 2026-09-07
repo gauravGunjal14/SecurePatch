@@ -1,3 +1,5 @@
+jest.mock("../src/config/github");
+
 const request = require("supertest");
 const app = require("../src/app");
 
