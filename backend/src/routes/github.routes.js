@@ -1,15 +1,17 @@
 const express = require("express");
 
 const { githubApp } = require("../config/github");
+const { requireAuth } = require("../middleware/auth.middleware");
+const { requireOrganizationMember } = require("../middleware/organization.middleware");
+const { requireRole } = require("../middleware/rbac.middleware");
 
-const {
-    getRepositories,
-    getRepositoryFiles,
-    getFileContent,
-} = require("../services/github.service");
+const { connectGitHubInstallation, getGitHubStatus } = require("../controllers/github.controller");
+
+const { getRepositories, getRepositoryFiles, getFileContent } = require("../services/github.service");
+
+const Organization = require("../models/Organization");
 
 const router = express.Router();
-
 
 // GitHub App authentication test
 router.get("/test", async (req, res, next) => {
@@ -30,13 +32,10 @@ router.get("/test", async (req, res, next) => {
     }
 });
 
-
 // Get GitHub App installations
 router.get("/installations", async (req, res, next) => {
     try {
-        const { data } = await githubApp.octokit.request(
-            "GET /app/installations"
-        );
+        const { data } = await githubApp.octokit.request("GET /app/installations");
 
         return res.status(200).json({
             success: true,
@@ -44,6 +43,7 @@ router.get("/installations", async (req, res, next) => {
                 id: installation.id,
                 account: installation.account?.login,
                 accountType: installation.account?.type,
+                htmlUrl: installation.html_url || null,
             })),
             message: "GitHub App installations fetched successfully",
         });
@@ -52,41 +52,92 @@ router.get("/installations", async (req, res, next) => {
     }
 });
 
+// Get GitHub connection status
+router.get(
+    "/organizations/:organizationId/status",
+    requireAuth,
+    requireOrganizationMember,
+    getGitHubStatus
+);
 
-// Get repositories available to an installation
-router.get("/repositories/:installationId", async (req, res, next) => {
-    try {
-        const { installationId } = req.params;
+// Get repositories for the authenticated organization's GitHub installation
+router.get(
+    "/organizations/:organizationId/repositories",
+    requireAuth,
+    requireOrganizationMember,
+    async (req, res, next) => {
+        try {
+            const organization = await Organization.findById(req.params.organizationId);
 
-        const repositories = await getRepositories(installationId);
+            if (!organization) {
+                return res.status(404).json({
+                    success: false,
+                    error: {
+                        code: "ORGANIZATION_NOT_FOUND",
+                        message: "Organization not found",
+                    },
+                });
+            }
 
-        return res.status(200).json({
-            success: true,
-            data: {
-                totalCount: repositories.length,
-                repositories,
-            },
-            message: "GitHub repositories fetched successfully",
-        });
-    } catch (error) {
-        next(error);
+            if (!organization.githubInstallationId) {
+                return res.status(404).json({
+                    success: false,
+                    error: {
+                        code: "GITHUB_NOT_CONNECTED",
+                        message: "GitHub is not connected to this organization",
+                    },
+                });
+            }
+
+            const repositories = await getRepositories(organization.githubInstallationId);
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    totalCount: repositories.length,
+                    repositories,
+                },
+                message: "GitHub repositories fetched successfully",
+            });
+        } catch (error) {
+            next(error);
+        }
     }
-});
-
+);
 
 // Get files from a repository
 router.get(
-    "/repositories/:installationId/:owner/:repo/files",
+    "/organizations/:organizationId/repositories/:owner/:repo/files",
+    requireAuth,
+    requireOrganizationMember,
     async (req, res, next) => {
         try {
-            const {
-                installationId,
-                owner,
-                repo,
-            } = req.params;
+            const organization = await Organization.findById(req.params.organizationId);
+
+            if (!organization) {
+                return res.status(404).json({
+                    success: false,
+                    error: {
+                        code: "ORGANIZATION_NOT_FOUND",
+                        message: "Organization not found",
+                    },
+                });
+            }
+
+            if (!organization.githubInstallationId) {
+                return res.status(404).json({
+                    success: false,
+                    error: {
+                        code: "GITHUB_NOT_CONNECTED",
+                        message: "GitHub is not connected to this organization",
+                    },
+                });
+            }
+
+            const { owner, repo } = req.params;
 
             const files = await getRepositoryFiles(
-                installationId,
+                organization.githubInstallationId,
                 owner,
                 repo
             );
@@ -105,18 +156,36 @@ router.get(
     }
 );
 
-
 // Get content of a repository file
 router.get(
-    "/repositories/:installationId/:owner/:repo/file",
+    "/organizations/:organizationId/repositories/:owner/:repo/file",
+    requireAuth,
+    requireOrganizationMember,
     async (req, res, next) => {
         try {
-            const {
-                installationId,
-                owner,
-                repo,
-            } = req.params;
+            const organization = await Organization.findById(req.params.organizationId);
 
+            if (!organization) {
+                return res.status(404).json({
+                    success: false,
+                    error: {
+                        code: "ORGANIZATION_NOT_FOUND",
+                        message: "Organization not found",
+                    },
+                });
+            }
+
+            if (!organization.githubInstallationId) {
+                return res.status(404).json({
+                    success: false,
+                    error: {
+                        code: "GITHUB_NOT_CONNECTED",
+                        message: "GitHub is not connected to this organization",
+                    },
+                });
+            }
+
+            const { owner, repo } = req.params;
             const { path: filePath } = req.query;
 
             if (!filePath) {
@@ -130,7 +199,7 @@ router.get(
             }
 
             const file = await getFileContent(
-                installationId,
+                organization.githubInstallationId,
                 owner,
                 repo,
                 filePath
@@ -147,5 +216,13 @@ router.get(
     }
 );
 
+// Connect GitHub installation to organization
+router.post(
+    "/organizations/:organizationId/connect",
+    requireAuth,
+    requireOrganizationMember,
+    requireRole("owner", "admin"),
+    connectGitHubInstallation
+);
 
 module.exports = router;

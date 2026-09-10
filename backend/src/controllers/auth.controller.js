@@ -1,18 +1,7 @@
 const ApiResponse = require("../utils/ApiResponse");
 
 const googleCallback = (req, res) => {
-  return ApiResponse.success(
-    res,
-    {
-      user: {
-        id: req.user.id,
-        name: req.user.name,
-        email: req.user.email,
-        profileImage: req.user.profileImage,
-      },
-    },
-    "Google authentication successful"
-  );
+  return res.redirect("http://localhost:5174/dashboard");
 };
 
 const getCurrentUser = (req, res) => {
